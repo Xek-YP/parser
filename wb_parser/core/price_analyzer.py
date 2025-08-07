@@ -5,6 +5,23 @@ from data.database import Database
 class PriceAnalyzer:
     def __init__(self, db: Database):
         self.db = db
+
+    def get_real_discounts(self, products: List) -> List[Dict]:
+        """Возвращает только товары с реальными скидками"""
+        real_discounts = []
+        for product in products:
+            analysis = self.analyze_price_changes(product.link)
+            
+            if analysis.get('discount_analysis', {}).get('status') == 'real_discount':
+                real_discounts.append({
+                    'product': product,
+                    'analysis': analysis
+                })
+        
+        # Сортируем по размеру скидки (по убыванию)
+        return sorted(real_discounts, 
+                    key=lambda x: x['analysis']['discount_analysis']['discount'], 
+                    reverse=True)
     
     def analyze_price_changes(self, product_link: str) -> Dict:
         """Анализирует динамику цен для конкретного товара"""
