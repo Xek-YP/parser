@@ -1,21 +1,32 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
+
+@dataclass
+class PriceHistory:
+    product_id: int
+    timestamp: str
+    price: int
+    old_price: Optional[int]
+    discount: Optional[int]
 
 @dataclass
 class Product:
+    id: Optional[int]  # Для ID из базы данных
     timestamp: str
     brand: str
     name: str
     rate: float
     count_evolutions: int
     price: int
-    old_price: int | None
-    discount: int | None
+    old_price: Optional[int]
+    discount: Optional[int]
     link: str
     
     @classmethod
     def from_dict(cls, data: dict):
         return cls(
+            id=data.get("id"),
             timestamp=data.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             brand=data.get("brand", ""),
             name=data.get("name", ""),

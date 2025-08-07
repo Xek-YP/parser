@@ -3,6 +3,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 from typing import List
 from data.models import Product
+from data.database import Database
 
 class DataSaver:
     @staticmethod
@@ -100,3 +101,9 @@ class DataSaver:
             
         except Exception as e:
             print(f"Ошибка при сохранении Excel: {e}")
+
+    @staticmethod
+    def save_to_database(products: List[Product], db_name: str = "output/wildberries.db"):
+        """Сохранение в SQLite базу данных"""
+        db = Database(db_name)
+        db.save_products(products)

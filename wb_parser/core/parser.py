@@ -73,13 +73,13 @@ class WildberriesParser:
             except:
                 pass
 
-    def parse_category(self, url: str, max_pages: int = 3) -> List[Product]:
+    def parse_category(self, url: str, max_pages: int = 3, fbrand='5772') -> List[Product]:
         """Парсинг всей категории"""
         products = []
         
         for page in range(1, max_pages + 1):
             print(f"\nПарсинг страницы {page}...")
-            page_url = f"{url.split('?')[0]}?page={page}&sort=popular&fbrand=5772"
+            page_url = f"{url.split('?')[0]}?page={page}&sort=popular&fbrand={fbrand}"
             
             try:
                 self.browser.driver.get(page_url)
