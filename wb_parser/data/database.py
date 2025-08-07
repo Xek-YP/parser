@@ -1,7 +1,6 @@
 import sqlite3
 from typing import List, Optional
 from pathlib import Path
-from datetime import datetime
 from data.models import Product, PriceHistory
 
 class Database:
@@ -179,3 +178,31 @@ class Database:
         except sqlite3.Error as e:
             print(f"Ошибка при анализе изменения цен: {e}")
             return []
+        
+    def get_product_by_link(self, link: str) -> Optional[Product]:
+        """Получает товар по ссылке"""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM products WHERE link = ?
+                """, (link,))
+                row = cursor.fetchone()
+                
+                if row:
+                    return Product(
+                        id=row[0],
+                        timestamp=row[1],
+                        brand=row[2],
+                        name=row[3],
+                        rate=row[4],
+                        count_evolutions=row[5],
+                        price=row[6],
+                        old_price=row[7],
+                        discount=row[8],
+                        link=row[9]
+                    )
+                return None
+        except sqlite3.Error as e:
+            print(f"Error getting product: {e}")
+            return None

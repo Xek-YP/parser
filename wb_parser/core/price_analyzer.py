@@ -1,5 +1,4 @@
 from typing import List, Dict
-from datetime import datetime, timedelta
 from data.models import PriceHistory
 from data.database import Database
 
@@ -10,7 +9,6 @@ class PriceAnalyzer:
     def analyze_price_changes(self, product_link: str) -> Dict:
         """Анализирует динамику цен для конкретного товара"""
         history = self.db.get_price_history(product_link, days=60)
-        print(history)
         if not history:
             return {"status": "no_data"}
         
@@ -39,7 +37,7 @@ class PriceAnalyzer:
     def _analyze_discounts(self, history: List[PriceHistory]) -> Dict:
         """Анализирует подлинность скидок"""
         if len(history) < 3:
-            return {"Статус": "недостаточно данных"}
+            return {"status": "not_enough_data"}
         
         current = history[0]
         
@@ -48,28 +46,28 @@ class PriceAnalyzer:
             prev_prices = [h.price for h in history[1:4]]
             if current.price < min(prev_prices):
                 return {
-                    "Статус": "реальная скидка",
-                    "Скидка": current.discount,
-                    "Цена до скидок": max(prev_prices)
+                    "status": "real_discount",
+                    "discount": current.discount,
+                    "price_before": max(prev_prices)
                 }
             else:
                 return {
-                    "Статус": "возможно не настоящая скидка",
-                    "Скидка": current.discount,
-                    "Цена до скидок": max(prev_prices)
+                    "status": "possible_fake_discount",
+                    "discount": current.discount,
+                    "price_before": max(prev_prices)
                 }
-        return {"status": "нет скидки"}
+        return {"status": "no_discount"}
     
     def _calculate_trend(self, history: List[PriceHistory]) -> str:
         """Определяет тренд цены (рост/падение/стабильность)"""
         if len(history) < 3:
-            return "недостаточно данных"
+            return "not_enough_data"
         
         recent = history[:7]  # Берем последнюю неделю
         prices = [h.price for h in recent]
         
         if len(prices) < 3:
-            return "стабильный"
+            return "stable"
         
         # Простая линейная регрессия
         x = range(len(prices))
@@ -83,13 +81,13 @@ class PriceAnalyzer:
         try:
             slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x**2)
         except ZeroDivisionError:
-            return "стабильный"
+            return "stable"
         
         if slope > 0.05 * prices[0]:
-            return "возрастающий"
+            return "increasing"
         elif slope < -0.05 * prices[0]:
-            return "убывающий"
-        return "стабильный"
+            return "decreasing"
+        return "stable"
     
     def find_best_deals(self, min_discount: int = 20) -> List[Dict]:
         """Находит товары с реальными скидками"""

@@ -20,8 +20,6 @@ def main():
         for i, product in enumerate(products[:40], 1):
             print(f"{i}. {product.brand} {product.name} {product.rate} - {product.price} ₽ | {product.link}")
         
-        saver.save_to_csv(products)
-        saver.save_to_excel(products)
         saver.save_to_database(products)
 
         # Анализ динамики цен (пример для первых 3 товаров)
@@ -44,4 +42,4 @@ def main():
         browser.close()
 
 if __name__ == "__main__":
-    main()
+    main() 
