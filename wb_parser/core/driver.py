@@ -1,61 +1,174 @@
+import random
+import sys
 import time
+import types
+from pathlib import Path
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+
+def _ensure_distutils():
+    """Python 3.13 убрал distutils, а undetected-chromedriver всё ещё его импортирует."""
+    try:
+        from distutils.version import LooseVersion  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    class LooseVersion:
+        def __init__(self, vstring):
+            if isinstance(vstring, bytes):
+                vstring = vstring.decode()
+            self.vstring = str(vstring)
+            parts = []
+            for chunk in self.vstring.replace("-", ".").split("."):
+                number = ""
+                for char in chunk:
+                    if char.isdigit():
+                        number += char
+                    else:
+                        break
+                if number:
+                    parts.append(int(number))
+            self.version = parts
+
+        def __str__(self):
+            return self.vstring
+
+    distutils_mod = types.ModuleType("distutils")
+    version_mod = types.ModuleType("distutils.version")
+    version_mod.LooseVersion = LooseVersion
+    distutils_mod.version = version_mod
+    sys.modules["distutils"] = distutils_mod
+    sys.modules["distutils.version"] = version_mod
+
+
+_ensure_distutils()
+
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+# Отдельный профиль, чтобы не трогать обычный Chrome и сохранять cookies между запусками.
+PROFILE_DIR = Path(__file__).resolve().parents[2] / "output" / "chrome_profile"
+
+BLOCK_MARKERS = (
+    "подозрительная активность",
+    "подозрительной активности",
+    "доступ ограничен",
+    "подтвердите, что вы не робот",
+    "вы робот",
+)
+
 
 class Browser:
     def __init__(self):
         self.driver = self._setup_driver()
-        self.wait = WebDriverWait(self.driver, 10)
+        self.wait = WebDriverWait(self.driver, 20)
+
+    def _chrome_major_version(self):
+        """Мажорная версия установленного Chrome, чтобы драйвер ей соответствовал."""
+        app_dir = Path(r"C:\Program Files\Google\Chrome\Application")
+        versions = []
+        if app_dir.exists():
+            for child in app_dir.iterdir():
+                if child.is_dir() and child.name[:1].isdigit():
+                    versions.append(int(child.name.split(".", 1)[0]))
+        return max(versions) if versions else None
 
     def _setup_driver(self):
-        """Настройка драйвера Chrome"""
-        options = Options()
-        options.add_argument("--lang=ru")
-        options.add_argument("--geo=ru")
+        """Обычный Chrome без признаков автоматизации Selenium."""
+        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+        options = uc.ChromeOptions()
+        options.add_argument("--lang=ru-RU")
         options.add_argument("--start-maximized")
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
-        
-        driver = webdriver.Chrome(options=options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        # Не подменяем User-Agent: он должен совпадать с реальной версией Chrome.
+        # Старый UA (Chrome/120 при установленном Chrome 155) сам по себе выглядит как бот.
+
+        kwargs = {
+            "options": options,
+            "user_data_dir": str(PROFILE_DIR),
+            "use_subprocess": True,
+        }
+        major = self._chrome_major_version()
+        if major:
+            kwargs["version_main"] = major
+
+        driver = uc.Chrome(**kwargs)
+        driver.set_page_load_timeout(60)
         return driver
 
+    def warmup(self):
+        """Сначала открываем главную, как обычный заход на сайт, и принимаем cookies."""
+        self.driver.get("https://www.wildberries.ru/")
+        time.sleep(random.uniform(2, 4))
+        self.accept_cookies()
+
     def accept_cookies(self):
-        """Принятие cookies"""
+        """Принятие cookies. Короткий таймаут и только тексты баннера, без «Ок»."""
         try:
-            accept_texts = [
-                'Принять', 'Принять все', 'Принять cookies', 
-                'Ок', 'Окей', 'OK', 'Okay',
-                'Согласен', 'Согласиться', 'Я согласен',
-                'Accept', 'Accept all', 'Accept cookies',
-                'Agree', 'I agree', 'Consent', 'Allow'
-            ]
-            
-            xpath_expression = "//button[" + " or ".join(f"contains(., '{text}')" for text in accept_texts) + "]"
-            
-            self.wait.until(
+            xpath_expression = (
+                "//button[contains(., 'Принять') or contains(., 'Согласен') "
+                "or contains(., 'Accept') or contains(., 'Agree')]"
+            )
+            WebDriverWait(self.driver, 3).until(
                 EC.element_to_be_clickable((By.XPATH, xpath_expression))
             ).click()
-        except Exception as e:
-            print(f"Не удалось найти кнопку принятия cookies: {e}")
+            time.sleep(random.uniform(0.4, 1))
+        except Exception:
+            pass
 
-    def scroll_page(self, scroll_pause=1):
-        """Прокрутка страницы"""
+    def is_blocked(self) -> bool:
+        """Страница антибота Wildberries вместо каталога."""
+        try:
+            text = (self.driver.page_source or "").lower()
+        except Exception:
+            return False
+        return any(marker in text for marker in BLOCK_MARKERS)
+
+    def wait_if_blocked(self, timeout: int = 120) -> bool:
+        """Даёт пройти проверку вручную в открытом окне Chrome."""
+        if not self.is_blocked():
+            return False
+
+        print(
+            "Wildberries показал проверку на подозрительную активность. "
+            "Если в окне Chrome есть кнопка или капча, пройдите её вручную. "
+            f"Жду до {timeout} секунд."
+        )
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(2)
+            if not self.is_blocked():
+                print("Проверка пройдена, продолжаю сбор.")
+                time.sleep(random.uniform(1, 2))
+                return True
+
+        print("Проверка так и не исчезла, карточки с этой страницы не собрать.")
+        return False
+
+    def scroll_page(self, scroll_pause=0.5):
+        """Плавная прокрутка, чтобы карточки догрузились и жест не выглядел мгновенным."""
         last_height = self.driver.execute_script("return document.body.scrollHeight")
-        while True:
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(scroll_pause)
+        current = 0
+        idle_rounds = 0
+
+        while idle_rounds < 2:
+            step = random.randint(350, 800)
+            current = min(current + step, last_height)
+            self.driver.execute_script("window.scrollTo(0, arguments[0]);", current)
+            time.sleep(random.uniform(scroll_pause, scroll_pause + 0.7))
+
             new_height = self.driver.execute_script("return document.body.scrollHeight")
-            if new_height == last_height:
-                break
+            if current >= last_height and new_height <= last_height:
+                idle_rounds += 1
+            else:
+                idle_rounds = 0
             last_height = new_height
 
     def close(self):
-        """Закрытие браузера"""
-        self.driver.quit()
+        """Закрытие браузера."""
+        try:
+            self.driver.quit()
+        except Exception:
+            pass

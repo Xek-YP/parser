@@ -9,28 +9,38 @@ class WildberriesParser:
     def __init__(self, browser):
         self.browser = browser
 
+    def _find(self, card: WebElement, selector: str) -> Optional[WebElement]:
+        elements = card.find_elements(By.CSS_SELECTOR, selector)
+        return elements[0] if elements else None
+
     def parse_product_card(self, card: WebElement) -> Optional[Product]:
         """Парсинг одной карточки товара"""
         try:
-            brand_elem = card.find_element(By.CSS_SELECTOR, ".product-card__brand, .brand-name, .product-card__brand-container")
-            name_elem = card.find_element(By.CSS_SELECTOR, ".product-card__name, .goods-name")
-            price_elem = card.find_element(By.CSS_SELECTOR, "ins.price__lower-price, .price__lower-price, .final-price")
-            link_elem = card.find_element(By.CSS_SELECTOR, "a.j-card-link")
-            
+            brand_elem = self._find(card, 'span[class*="brand--"], .product-card__brand, .brand-name')
+            name_elem = self._find(card, 'span[class*="productName--"], .product-card__name, .goods-name')
+            price_elem = self._find(
+                card,
+                '[class*="price--"] ins, ins.price__lower-price, .price__lower-price, .final-price',
+            )
+            link_elem = self._find(card, 'a[class*="catalogCardLink--"], a.j-card-link')
+
+            if not name_elem or not price_elem or not link_elem:
+                return None
+
             product_data = {
                 "brand": clean_text(brand_elem.text) if brand_elem else "Без бренда",
                 "name": clean_text(name_elem.text),
                 "price": clean_price(price_elem.text),
-                "link": link_elem.get_attribute('href'),
+                "link": link_elem.get_attribute("href"),
                 "rate": 0,
                 "count_evolutions": 0,
                 "old_price": None,
-                "discount": None
+                "discount": None,
             }
 
-            # Дополнительные данные
             self._parse_old_price(card, product_data)
             self._parse_rating(card, product_data)
+            self._parse_discount_badge(card, product_data)
             self._calculate_discount(product_data)
 
             return Product.from_dict(product_data)
@@ -40,38 +50,44 @@ class WildberriesParser:
 
     def _parse_old_price(self, card: WebElement, data: dict):
         """Парсинг старой цены"""
-        try:
-            old_price_elem = card.find_element(By.CSS_SELECTOR, "del")
-            data["old_price"] = clean_price(old_price_elem.text)
-        except:
-            pass
+        old_price_elem = self._find(card, '[class*="price--"] del, del')
+        if old_price_elem:
+            data["old_price"] = clean_price(old_price_elem.text) or None
+
+    def _parse_discount_badge(self, card: WebElement, data: dict):
+        """Скидка с бейджа карточки, например −16%."""
+        badge = self._find(card, '.mo-badge_colors-bg_red')
+        if not badge:
+            return
+        discount = clean_price(badge.text)
+        if discount:
+            data["discount"] = discount
 
     def _parse_rating(self, card: WebElement, data: dict):
-        """Парсинг рейтинга и количества оценок"""
-        try:
-            rate_elem = card.find_element(By.CSS_SELECTOR, ".address-rate-mini--sm")
-            rate_text = clean_text(rate_elem.text).replace(',', '.')
-            data["rate"] = float(rate_text)
-        except Exception as e:
-            print(f"Ошибка при парсинге рейтинга: {e}")
-            data["rate"] = 0.0
+        """Парсинг рейтинга и количества оценок, если они есть на карточке."""
+        rate_elem = self._find(card, '[class*="address-rate"], .address-rate-mini--sm')
+        if rate_elem:
+            rate_text = clean_text(rate_elem.text).replace(",", ".")
+            try:
+                data["rate"] = float(rate_text)
+            except ValueError:
+                data["rate"] = 0.0
 
-        try:
-            count_elem = card.find_element(By.CSS_SELECTOR, "span.product-card__count")
+        count_elem = self._find(card, 'span[class*="product-card__count"], span.product-card__count')
+        if count_elem:
             count = clean_price(count_elem.text)
             data["count_evolutions"] = count
             if count == 0:
                 data["rate"] = 0.0
-        except:
-            data["count_evolutions"] = 0
 
     def _calculate_discount(self, data: dict):
-        """Расчет скидки"""
-        if data.get("old_price") and data["price"]:
-            try:
-                data["discount"] = int(round((1 - data["price"] / data["old_price"]) * 100))
-            except:
-                pass
+        """Расчет скидки, если на карточке нет бейджа."""
+        if data.get("discount") or not data.get("old_price") or not data.get("price"):
+            return
+        try:
+            data["discount"] = int(round((1 - data["price"] / data["old_price"]) * 100))
+        except ZeroDivisionError:
+            pass
 
     def parse_category(self, url: str, max_pages: int = 3, fbrand='5772') -> List[Product]:
         """Парсинг всей категории"""
@@ -82,13 +98,15 @@ class WildberriesParser:
             page_url = f"{url.split('?')[0]}?page={page}&sort=popular&fbrand={fbrand}"
             
             try:
+                if page == 1:
+                    self.browser.warmup()
+
                 self.browser.driver.get(page_url)
                 random_delay(2, 4)
-                
-                if page == 1:
-                    self.browser.accept_cookies()
-                    random_delay(1, 2)
-                
+                self.browser.wait_if_blocked()
+                if self.browser.is_blocked():
+                    continue
+
                 self.browser.scroll_page()
                 random_delay(1, 2)
                 

@@ -15,7 +15,7 @@ def main():
         analyzer = PriceAnalyzer(db)
         
         url = "https://www.wildberries.ru/catalog/elektronika/smartfony-i-telefony/vse-smartfony"
-        products = parser.parse_category(url, max_pages=1, fbrand='23233')
+        products = parser.parse_category(url, max_pages=1, fbrand='6049')
         
         # Сохраняем все товары в базу
         saver.save_to_database(products)
