@@ -67,7 +67,6 @@ class DataSaver:
                 bottom=Side(style='thin')
             )
             
-            # Заголовки
             for col_num, header in enumerate(headers, 1):
                 cell = ws.cell(row=1, column=col_num, value=header)
                 cell.font = header_font
@@ -86,7 +85,6 @@ class DataSaver:
                 ws.cell(row=row_num, column=8, value=product.discount if product.discount else "").border = thin_border
                 ws.cell(row=row_num, column=9, value=product.link).border = thin_border
             
-            # Ширина столбцов
             column_widths = {
                 'A': 20, 'B': 20, 'C': 50, 
                 'D': 10, 'E': 15, 'F': 15,

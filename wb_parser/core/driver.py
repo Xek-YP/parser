@@ -48,7 +48,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-# Отдельный профиль, чтобы не трогать обычный Chrome и сохранять cookies между запусками.
 PROFILE_DIR = Path(__file__).resolve().parents[2] / "output" / "chrome_profile"
 
 BLOCK_MARKERS = (
@@ -82,8 +81,6 @@ class Browser:
         options = uc.ChromeOptions()
         options.add_argument("--lang=ru-RU")
         options.add_argument("--start-maximized")
-        # Не подменяем User-Agent: он должен совпадать с реальной версией Chrome.
-        # Старый UA (Chrome/120 при установленном Chrome 155) сам по себе выглядит как бот.
 
         kwargs = {
             "options": options,
@@ -97,12 +94,6 @@ class Browser:
         driver = uc.Chrome(**kwargs)
         driver.set_page_load_timeout(60)
         return driver
-
-    def warmup(self):
-        """Сначала открываем главную, как обычный заход на сайт, и принимаем cookies."""
-        self.driver.get("https://www.wildberries.ru/")
-        time.sleep(random.uniform(2, 4))
-        self.accept_cookies()
 
     def accept_cookies(self):
         """Принятие cookies. Короткий таймаут и только тексты баннера, без «Ок»."""
@@ -147,13 +138,18 @@ class Browser:
         print("Проверка так и не исчезла, карточки с этой страницы не собрать.")
         return False
 
-    def scroll_page(self, scroll_pause=0.5):
-        """Плавная прокрутка, чтобы карточки догрузились и жест не выглядел мгновенным."""
+    def scroll_page(self, scroll_pause=0.5, max_seconds=20):
+        """Плавная прокрутка. Дольше max_seconds не идём: собираем уже загруженное."""
         last_height = self.driver.execute_script("return document.body.scrollHeight")
         current = 0
         idle_rounds = 0
+        deadline = time.time() + max_seconds
 
         while idle_rounds < 2:
+            if time.time() >= deadline:
+                print(f"Прокрутка дольше {max_seconds} секунд, собираю уже загруженные карточки.")
+                break
+
             step = random.randint(350, 800)
             current = min(current + step, last_height)
             self.driver.execute_script("window.scrollTo(0, arguments[0]);", current)

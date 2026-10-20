@@ -98,11 +98,9 @@ class WildberriesParser:
             page_url = f"{url.split('?')[0]}?page={page}&sort=popular&fbrand={fbrand}"
             
             try:
-                if page == 1:
-                    self.browser.warmup()
-
                 self.browser.driver.get(page_url)
                 random_delay(2, 4)
+                self.browser.accept_cookies()
                 self.browser.wait_if_blocked()
                 if self.browser.is_blocked():
                     continue

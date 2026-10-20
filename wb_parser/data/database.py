@@ -14,8 +14,7 @@ class Database:
         
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            
-            # Таблица товаров
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS products (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,8 +30,7 @@ class Database:
                     UNIQUE(brand, name, link) ON CONFLICT IGNORE
                 )
             """)
-            
-            # Таблица истории цен
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS price_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,8 +42,7 @@ class Database:
                     FOREIGN KEY (product_id) REFERENCES products (id)
                 )
             """)
-            
-            # Индексы для ускорения поиска
+
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_link ON products(link)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_product_id ON price_history(product_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_timestamp ON price_history(timestamp)")
@@ -87,8 +84,7 @@ class Database:
                         SELECT id FROM products WHERE link = ?
                     """, (product.link,))
                     product_id = cursor.fetchone()[0]
-                    
-                    # Сохраняем историю цен
+
                     cursor.execute("""
                         INSERT INTO price_history (
                             product_id, timestamp, price, 

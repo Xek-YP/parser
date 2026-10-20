@@ -12,7 +12,7 @@ class PriceHistory:
 
 @dataclass
 class Product:
-    id: Optional[int]  # Для ID из базы данных
+    id: Optional[int]
     timestamp: str
     brand: str
     name: str

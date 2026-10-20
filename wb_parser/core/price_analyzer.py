@@ -18,7 +18,6 @@ class PriceAnalyzer:
                     'analysis': analysis
                 })
         
-        # Сортируем по размеру скидки (по убыванию)
         return sorted(real_discounts, 
                     key=lambda x: x['analysis']['discount_analysis']['discount'], 
                     reverse=True)
@@ -32,11 +31,9 @@ class PriceAnalyzer:
         current = history[0]
         oldest = history[-1]
         
-        # Основные метрики
         price_diff = current.price - oldest.price
         price_diff_percent = (price_diff / oldest.price) * 100 if oldest.price else 0
         
-        # Анализ скидок
         discount_analysis = self._analyze_discounts(history)
         
         return {
@@ -57,8 +54,7 @@ class PriceAnalyzer:
             return {"status": "not_enough_data"}
         
         current = history[0]
-        
-        # Проверка на "накрутку" цены перед скидкой
+
         if current.discount:
             prev_prices = [h.price for h in history[1:4]]
             if current.price < min(prev_prices):
@@ -80,13 +76,12 @@ class PriceAnalyzer:
         if len(history) < 3:
             return "not_enough_data"
         
-        recent = history[:7]  # Берем последнюю неделю
+        recent = history[:7]
         prices = [h.price for h in recent]
         
         if len(prices) < 3:
             return "stable"
-        
-        # Простая линейная регрессия
+
         x = range(len(prices))
         y = prices
         n = len(x)
